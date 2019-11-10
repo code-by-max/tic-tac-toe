@@ -2,9 +2,10 @@ import os, random, time, datetime
 #import msvcrt 
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
+from operator import itemgetter
 
-good_data = '/Users/max/Dropbox/Projects/tictactoe/excel_export.xlsx'
-bad_data = '/Users/max/Dropbox/Projects/tictactoe/bad_export.xlsx'
+good_data = '/Users/max/Dropbox/Projects/tic-tac-toe/excel_export.xlsx'
+bad_data = '/Users/max/Dropbox/Projects/tic-tac-toe/bad_export.xlsx'
 
 class moveSet:
     def __init__(self):
@@ -117,7 +118,7 @@ def buildDataFrame(move_set, df): #input is a moveSet object
         df.to_excel(good_data, index = False, header=True)
     return df_temp
 
-def buildBadData(move_set, df_bad):
+def buildBadData(move_set, df):
     result = []
     count = 0
     for game in move_set.states:
@@ -131,18 +132,18 @@ def buildBadData(move_set, df_bad):
         result.append(temp_dict)
     df_temp = pd.DataFrame(result)
     print(df_temp)
-    if df_bad is None:
-        df_temp.to_excel(bad_data, index = False, header=True)
+    if df is None:
+        df_temp.to_excel(good_data, index = False, header=True)
     else:
         for index, row in df_temp.iterrows():
-            row_search = df_bad.loc[(df_bad['0,0'] == row['0,0']) & (df_bad['0,1'] == row['0,1']) & (df_bad['0,2'] == row['0,2']) & (df_bad['1,0'] == row['1,0']) & (df_bad['1,1'] == row['1,1']) & (df_bad['1,2'] == row['1,2']) & (df_bad['2,0'] == row['2,0']) & (df_bad['2,1'] == row['2,1']) & (df_bad['2,2'] == row['2,2']) & (df_bad['Move'] == row['Move'])]
+            row_search = df.loc[(df['0,0'] == row['0,0']) & (df['0,1'] == row['0,1']) & (df['0,2'] == row['0,2']) & (df['1,0'] == row['1,0']) & (df['1,1'] == row['1,1']) & (df['1,2'] == row['1,2']) & (df['2,0'] == row['2,0']) & (df['2,1'] == row['2,1']) & (df['2,2'] == row['2,2']) & (df['Move'] == row['Move'])]
             if not row_search.empty:
-                df_bad.loc[(df_bad['0,0'] == row['0,0']) & (df_bad['0,1'] == row['0,1']) & (df_bad['0,2'] == row['0,2']) & (df_bad['1,0'] == row['1,0']) & (df_bad['1,1'] == row['1,1']) & (df_bad['1,2'] == row['1,2']) & (df_bad['2,0'] == row['2,0']) & (df_bad['2,1'] == row['2,1']) & (df_bad['2,2'] == row['2,2']) & (df_bad['Move'] == row['Move']), 'count'] += 1 
+                df.loc[(df['0,0'] == row['0,0']) & (df['0,1'] == row['0,1']) & (df['0,2'] == row['0,2']) & (df['1,0'] == row['1,0']) & (df['1,1'] == row['1,1']) & (df['1,2'] == row['1,2']) & (df['2,0'] == row['2,0']) & (df['2,1'] == row['2,1']) & (df['2,2'] == row['2,2']) & (df['Move'] == row['Move']), 'count'] -= 1 
                 df_temp = df_temp.loc[(df_temp['0,0'] != row['0,0']) | (df_temp['0,1'] != row['0,1']) | (df_temp['0,2'] != row['0,2']) | (df_temp['1,0'] != row['1,0']) | (df_temp['1,1'] != row['1,1']) | (df_temp['1,2'] != row['1,2']) | (df_temp['2,0'] != row['2,0']) | (df_temp['2,1'] != row['2,1']) | (df_temp['2,2'] != row['2,2']) | (df_temp['Move'] != row['Move'])].dropna()
 
-        df_bad = pd.concat([df_bad, df_temp], ignore_index=True, sort=False)
+        df = pd.concat([df, df_temp], ignore_index=True, sort=False)
         #result = removeDups(result)
-        df_bad.to_excel(bad_data, index = False, header=True)
+        df.to_excel(good_data, index = False, header=True)
     return df_temp
 
 def deleteBadRows(move_set):
@@ -171,27 +172,23 @@ def analyzePossibleMoves(game, num, classifier):
     state.append(converted[2][2])  
     result.append(state)
     #print(classifier.predict(result))
-
-    return classifier.predict(result)
-    #results = []
-
-    #greatest = -99999999
-    #for i in range(len(game)):
-        #for j in range(len(game[i])):
-            #if game[i][j] == "_":
-                #converted = convertBoard(game, num)
-                #cur_move ="{" + "{0}, {1}".format(i, j) + "}"
-                #numRows = getNumRows(converted, cur_move) - getBadRows(converted, cur_move)
-                #if numRows == greatest:
-                #    results.append([cur_move, numRows])
-                #if numRows > greatest:
-                #    results = []
-                #    results.append([cur_move, numRows])
-                #    greatest = numRows
-                    
-    #print(results)
-    #spot = random.randint(0, len(results)-1)
-    #return movesList[results[spot][0]]
+    probs = classifier.predict_proba(result)[0]
+    item = { 'spot': '-1', 'prob': -1 }
+    arr = []
+    for num in range(len(probs)):
+        item['prob'] = probs[num]
+        item['spot'] = str(num + 1)
+        arr.append(item.copy())
+    
+    new_arr = sorted(arr, key=itemgetter('prob'), reverse=True)
+    for place in new_arr:
+        #print(place['spot'])
+        y = getY(place['spot'])
+        x = getX(place['spot'])
+        #print( y, x )
+        if game[y][x] == '_':
+            return x, y
+    return x, y
 
 def getNumRows(convert, move):
     df2 = df.loc[(df['0,0'] == convert[0][0]) & (df['0,1'] == convert[0][1]) & (df['0,2'] == convert[0][2]) & (df['1,0'] == convert[1][0]) & (df['1,1'] == convert[1][1]) & (df['1,2'] == convert[1][2]) & (df['2,0'] == convert[2][0]) & (df['2,1'] == convert[2][1]) & (df['2,2'] == convert[2][2]) & (df['Move'] == move)]
@@ -241,7 +238,7 @@ def expand(data):
 
 #begin games adjust games to change the number of games played
 startTime = datetime.datetime.now()
-games = 100
+games = 1000
 total_moves = 0
 win_lose_draw = [0, 0, 0]
 
@@ -252,7 +249,7 @@ expanded = expand(df)
     #print(row['Move'])
 X = expanded[['0,0', '0,1', '0,2', '1,0', '1,1', '1,2', '2,0', '2,1', '2,2']]
 y = expanded['Move']
-
+new_counter = 0
 clf = DecisionTreeClassifier().fit(X, y)
 
 for num in range(1,games + 1):
@@ -291,16 +288,15 @@ for num in range(1,games + 1):
             total_moves += len(p1.moves)
             print(("Moves: " + str(len(p1.moves))))
             #buildDataFrame(p1, df)
-            #deleteBadRows(p2)
+            #buildBadData(p2, df)
             win_lose_draw[0] += 1
             break
         if win == 2:
             print("o wins")
             game_state = 1
             total_moves += len(p1.moves)
-            #buildBadData(p1, df_bad)
-            #buildDataFrame(p2)
-            #deleteBadRows(p1)
+            #buildBadData(p1, df)
+            #buildDataFrame(p2, df)
             win_lose_draw[1] += 1
             break
         win = testDraw(gameBoard)
@@ -313,19 +309,14 @@ for num in range(1,games + 1):
             break
         
         if turn == 0: #player 1
-            p1.states.append(convertBoard(gameBoard, 1)) #adds the current board to the players moveset
-            
-            char = analyzePossibleMoves(gameBoard, 1, clf)
-            y = getY(char)
-            x = getX(char)
+            p1.states.append(convertBoard(gameBoard, 1)) #adds the current board to the players moveset     
+            x, y = analyzePossibleMoves(gameBoard, 1, clf)
             gameBoard[y][x] = "x"
             turn = 1
-            
             p1.moves.append("{" + "{0}, {1}".format(y, x) + "}") #adds the move the player chose to the moveset
             continue
         
         if turn == 1: #player 2
-            p2.states.append(convertBoard(gameBoard, 2)) #adds the current board to the players moveset
             done = 0
             while done == 0:
                 char = str(random.randint(1,10))
@@ -336,9 +327,10 @@ for num in range(1,games + 1):
                     done = 1
                 #else:
                  #   print("Try again")
+            p2.states.append(convertBoard(gameBoard, 2)) #adds the current board to the players moveset
+            #x, y = analyzePossibleMoves(gameBoard, 2, clf)
             gameBoard[y][x] = "o"
             turn = 0
-
             p2.moves.append("{" + "{0}, {1}".format(y, x) + "}") #adds the move the player chose to the moveset
             continue
     print(str(num) + '    ' + str(win_lose_draw[0]) + ' : ' + str(win_lose_draw[1]))
@@ -353,5 +345,9 @@ print("Draw: " + str(win_lose_draw[2]))
 print("Start time: " + str(startTime))
 print("End time: " + str(endTime))
 print("Time elapsed: " + str(endTime-startTime))
+
+#oop time: 1 minute 28.9 seconds 96.8% wins
+#old time: 1 minute 54.7 seconds 96.7%
+
 
     
