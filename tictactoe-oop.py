@@ -7,12 +7,15 @@ class MoveSet:
     def __init__(self):
         self.states = []
         self.moves = []
+    def __str__(self):
+        return 'States: ' + str(self.states) + '\n' + 'Moves: ' + str(self.moves)
 
 class Data:
     def __init__(self, location):
         self.address = location
 
         if os.path.isfile(location):
+            print("Training begun.")
             start = datetime.datetime.now()
             self.df = pd.read_excel(location)
             self.df_ex = self.expand(self.df)
@@ -21,6 +24,9 @@ class Data:
             self.clf = DecisionTreeClassifier().fit(X, y)
             end = datetime.datetime.now()
             print("Time to train:", str(end-start))
+        else:
+            self.df = None 
+            self.df_ex = None
     
     def expand(self, input):
         moves_list = {"{0, 0}" : "7", "{0, 1}" : "8", "{0, 2}" : "9", "{1, 0}" : "4", "{1, 1}" : "5", "{1, 2}" : "6", "{2, 0}" : "1", "{2, 1}" : "2", "{2, 2}" : "3"}
@@ -47,6 +53,12 @@ class Data:
     
     def refresh_df(self, new_df):
         self.df = new_df
+    
+    def refresh_model(self):
+        self.df_ex = self.expand(self.df)
+        X = self.df_ex[['0,0', '0,1', '0,2', '1,0', '1,1', '1,2', '2,0', '2,1', '2,2']]
+        y = self.df_ex['Move']
+        self.clf = DecisionTreeClassifier().fit(X, y)
 
 class GameBoard:
     def __init__(self):
@@ -66,9 +78,9 @@ class GameBoard:
         self.board[y][x] = 'x' if self.turn == 0 else 'o'
         self.turn = 1 if self.turn == 0 else 0
         if self.turn == 0:
-            self.p1.moves.append("{" + "{0}, {1}".format(y, x) + "}")
-        else:
             self.p2.moves.append("{" + "{0}, {1}".format(y, x) + "}")
+        else:
+            self.p1.moves.append("{" + "{0}, {1}".format(y, x) + "}")
 
     def Xwin(self):
         print("x wins")
@@ -132,17 +144,37 @@ class Player:
         self.games = num_game
         self.win_lose_draw = [0, 0, 0]
         self.data = data
+        self.win_sets = []
     
-    def play(self):
+    def play(self, toggle, save, buffer): 
+        #toggle is 0: ai vs random
+        #toggle is 1: player vs random
+        #toggle is 2: ai vs player
+        #toggle is 3: ai vs ai
+        #save is 0: moves are not saved
+        #save is 1: moves are saved
+
+        if os.path.isfile(self.data.address):
+            self.data.refresh_df(pd.read_excel(self.data.address))
+        else:
+            temp = MoveSet()
+            temp.moves.append('{2, 2}')
+            temp.states.append([[1, 1, 1], [1, 1, 1], [1, 1, 0]])
+            self.data.refresh_df(self.buildDataFrame(temp, None))
+
         self.startTime = datetime.datetime.now()
         for num in range(1, self.games+1):
-            if os.path.isfile(self.data.address):
+            if num % buffer == 0 and save == 1:
+                total = 0
+                self.printProgressBar(total, buffer, prefix = 'Progress:', suffix = 'Complete', length = 50)
+                for move in self.win_sets:
+                    self.buildDataFrame(move, self.data.df)
+                    total += 1
+                    self.printProgressBar(total, buffer, prefix = 'Progress:', suffix = 'Complete', length = 50)
+                self.win_sets = []
+
                 self.data.refresh_df(pd.read_excel(self.data.address))
-            else:
-                temp = MoveSet()
-                temp.moves.append('{2, 2}')
-                temp.states.append([[1, 1, 1], [1, 1, 1], [1, 1, 0]])
-                self.data.refresh_df(self.buildDataFrame(temp, None))
+                self.data.refresh_model()
 
             game = GameBoard()
 
@@ -150,26 +182,54 @@ class Player:
                 print(game)
                 moves, winner = game.testWin()
                 if moves is not None:
-                    #self.buildDataFrame(moves, self.data.df)
+                    if save == 1:
+                        self.win_sets.append(moves)
                     self.win_lose_draw[winner] += 1
                     break
                 
                 if game.turn == 0:
                     game.p1.states.append(game.convertBoard(1))
-                    x, y = self.analyzePossibleMoves(game, 1)
-                    game.move(x, y)
-                    continue
-                
-                if game.turn == 1:
+                    if toggle == 1:
+                        message = 'make a move: '
+                        while True:
+                            char = input(message)
+                            x, y = self.getXY(char)
+                            if game.board[y][x] == '_':
+                                game.move(x, y)
+                                break
+                            else:
+                                message = 'pick a different space: '
+                                continue
+                    else:
+                        x, y = self.analyzePossibleMoves(game, 1)
+                        game.move(x, y)
+                        continue
+
+                elif game.turn == 1:
                     game.p2.states.append(game.convertBoard(2))
-                    while True:
-                        char = str(random.randint(1,10))
-                        #char = input("make a move: ")
-                        x, y = self.getXY(char)
-                        if game.board[y][x] == '_':
-                            game.move(x, y)
-                            break
-                    continue
+                    if toggle == 2:
+                        message = 'make a move: '
+                        while True:
+                            char = input(message)
+                            x, y = self.getXY(char)
+                            if game.board[y][x] == '_':
+                                game.move(x, y)
+                                break
+                            else:
+                                message = 'pick a different space: '
+                                continue
+                    if toggle == 3:
+                        x, y = self.analyzePossibleMoves(game, 2)
+                        game.move(x, y)
+                        continue
+                    else:
+                        while True:
+                            char = str(random.randint(1,10))
+                            x, y = self.getXY(char)
+                            if game.board[y][x] == '_':
+                                game.move(x, y)
+                                break
+
             print(str(num) + '    ' + str(self.win_lose_draw[0]) + ' : ' + str(self.win_lose_draw[1]))
         self.endTime = datetime.datetime.now()
         self.printStat()
@@ -251,14 +311,37 @@ class Player:
             if game.board[y][x] == '_':
                 return x, y
         return x, y
+    
+    # Print iterations progress
+    def printProgressBar (self, iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+        """
+        Call in a loop to create terminal progress bar
+        @params:
+            iteration   - Required  : current iteration (Int)
+            total       - Required  : total iterations (Int)
+            prefix      - Optional  : prefix string (Str)
+            suffix      - Optional  : suffix string (Str)
+            decimals    - Optional  : positive number of decimals in percent complete (Int)
+            length      - Optional  : character length of bar (Int)
+            fill        - Optional  : bar fill character (Str)
+            printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+        """
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
+        print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end = printEnd)
+        # Print New Line on Complete
+        if iteration == total: 
+            print()
 
-data_loc = '/Users/max/Dropbox/Projects/tic-tac-toe/excel_export.xlsx'
+data_loc = '/Users/max/Documents/Random_Code/excel_export.xlsx'
 
 dataset = Data(data_loc)
 
-initial_test = Player(1000, dataset)
-initial_test.play()
-
-
-
-
+initial_test = Player(10000, dataset)
+initial_test.play(0, 1, 1000) #toggle: 0 for ai vs random, 1 to manually train vs random, 2 to play against ai, 3 ai vs ai
+                              #save: 0 to not add moves to excel file, 1 to add moves
+                              #buffer: amount of iterations before model is rebuilt and updates are saved
+                              #0.032
+                              #0.024
+                        
